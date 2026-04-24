@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -26,6 +27,10 @@ type responseData struct {
 	RemoteAddr string      `json:"remoteAddr" xml:"remoteAddr"`
 	Proto      string      `json:"proto" xml:"proto"`
 	Headers    []headerRow `json:"headers" xml:"headers>header"`
+	HTMLURL    string      `json:"-" xml:"-"`
+	JSONURL    string      `json:"-" xml:"-"`
+	XMLURL     string      `json:"-" xml:"-"`
+	TextURL    string      `json:"-" xml:"-"`
 }
 
 var page = template.Must(template.New("headers").Parse(`<!doctype html>
@@ -78,6 +83,18 @@ var page = template.Must(template.New("headers").Parse(`<!doctype html>
       {{end}}
     </tbody>
   </table>
+
+  <div class="card">
+    <h2>Helper</h2>
+    <p class="muted">Quick links for the current request path:</p>
+    <ul>
+      <li><a href="{{.HTMLURL}}">View as HTML</a></li>
+      <li><a href="{{.JSONURL}}">View as JSON</a></li>
+      <li><a href="{{.XMLURL}}">View as XML</a></li>
+      <li><a href="{{.TextURL}}">View as plain text</a></li>
+    </ul>
+    <p><strong>Tip:</strong> Send headers like <code>X-Auth-User</code>, <code>X-Forwarded-User</code>, or <code>Authorization</code> through your proxy and confirm they appear above.</p>
+  </div>
 </body>
 </html>`))
 
@@ -147,7 +164,25 @@ func buildResponseData(r *http.Request) responseData {
 		RemoteAddr: r.RemoteAddr,
 		Proto:      r.Proto,
 		Headers:    headers,
+		HTMLURL:    buildFormatURL(r, "html"),
+		JSONURL:    buildFormatURL(r, "json"),
+		XMLURL:     buildFormatURL(r, "xml"),
+		TextURL:    buildFormatURL(r, "text"),
 	}
+}
+
+func buildFormatURL(r *http.Request, format string) string {
+	q := url.Values{}
+	for key, values := range r.URL.Query() {
+		for _, value := range values {
+			q.Add(key, value)
+		}
+	}
+	q.Set("format", format)
+	if encoded := q.Encode(); encoded != "" {
+		return r.URL.Path + "?" + encoded
+	}
+	return r.URL.Path
 }
 
 func negotiateFormat(r *http.Request) string {
